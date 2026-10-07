@@ -1,0 +1,575 @@
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deal Creation to Campaign Execution Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --page:#E6E9EE; --panel:#FFFFFF; --text:#1B2333; --muted:#5B6577; --rule:#CBD2DD; --btn:#1B2333; --btnText:#FFFFFF;
+  --st-bg:#F4F6F9; --st-ink:#1B2333; --st-muted:#5B6577; --st-line:#CDD4DE; --st-card:#FFFFFF; --st-soft:#EEF1F5;
+  --c1:#2F5BD3; --c2:#0E8A8A; --c3:#B87D00; --c4:#B5367A; --c5:#7B44C2; --c6:#2E7D32;
+  --bad:#C2410C;
+  --sans:"Instrument Sans","Helvetica Neue",Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --page:#141A24; --panel:#1E2633; --text:#E7EBF2; --muted:#9AA4B5; --rule:#334055; --btn:#E7EBF2; --btnText:#141A24; }
+}
+:root[data-theme="dark"]{ --page:#141A24; --panel:#1E2633; --text:#E7EBF2; --muted:#9AA4B5; --rule:#334055; --btn:#E7EBF2; --btnText:#141A24; }
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;min-height:100%;background:var(--page);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+main{max-width:1120px;margin:0 auto;padding:28px 20px 40px}
+header h1{font-size:clamp(1.4rem,2.6vw,2rem);font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
+header p{margin:0 0 20px;color:var(--muted);font-size:1rem;max-width:68ch;line-height:1.5}
+
+.player{background:var(--panel);border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.screen{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;background:var(--st-bg)}
+.stage{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:0 0;background:var(--st-bg);color:var(--st-ink);font-family:var(--sans)}
+.caption{min-height:4.6em;padding:14px 22px;font-size:1.05rem;line-height:1.5;border-top:1px solid var(--rule)}
+.caption.hidden{visibility:hidden}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--rule)}
+.controls button{font:inherit;font-size:.92rem;font-weight:500;border-radius:8px;border:1px solid var(--rule);background:transparent;color:var(--text);padding:8px 12px;cursor:pointer;min-height:40px}
+.controls button.primary{background:var(--btn);color:var(--btnText);border-color:var(--btn);min-width:88px}
+.controls button:focus-visible,.chapters button:focus-visible,.poster button:focus-visible{outline:3px solid var(--c1);outline-offset:2px}
+.controls .spacer{flex:1}
+.controls .time{color:var(--muted);font-variant-numeric:tabular-nums;font-size:.9rem}
+.chapters{display:flex;gap:4px;padding:0 16px 14px}
+.chapters button{flex:1;border:0;background:transparent;padding:6px 0 0;cursor:pointer;text-align:left;color:var(--muted);font:inherit;font-size:.72rem;min-width:0}
+.chapters .bar{display:block;height:6px;border-radius:3px;background:var(--rule);overflow:hidden;margin-bottom:6px}
+.chapters .fill{display:block;height:100%;width:0;background:var(--text);transition:width .4s linear}
+.chapters .lbl{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chapters button.cur .lbl{color:var(--text);font-weight:600}
+@media (max-width:820px){ .chapters .lbl{display:none} .caption{font-size:.95rem} }
+
+.poster{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(244,246,249,.84);backdrop-filter:blur(2px);z-index:5;color:var(--st-ink);text-align:center;padding:16px}
+.poster.gone{display:none}
+.poster button{font:inherit;font-size:1.05rem;font-weight:600;background:#1B2333;color:#fff;border:0;border-radius:999px;padding:14px 26px;cursor:pointer}
+.poster small{color:var(--st-muted);font-size:.9rem;max-width:44ch;line-height:1.45}
+
+/* pipeline */
+.pipe{position:absolute;left:40px;right:40px;top:30px;height:60px;display:flex;align-items:center}
+.chip{flex:0 0 auto;display:flex;align-items:center;gap:9px;padding:8px 14px 8px 8px;border-radius:11px;border:2px solid var(--st-line);background:var(--st-card);color:var(--st-muted);font-weight:600;font-size:16px;transition:all .5s;white-space:nowrap}
+.chip .n{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--st-line);color:#fff;font-size:14px;transition:background .5s}
+.link{flex:1;height:2px;background:var(--st-line);margin:0 6px;position:relative;min-width:14px}
+.link::after{content:"";position:absolute;right:-2px;top:-5px;border-left:8px solid var(--st-line);border-top:6px solid transparent;border-bottom:6px solid transparent}
+.chip.on{color:var(--st-ink);border-color:var(--k)}
+.chip.on .n{background:var(--k)}
+[data-k="1"]{--k:var(--c1)}[data-k="2"]{--k:var(--c2)}[data-k="3"]{--k:var(--c3)}[data-k="4"]{--k:var(--c4)}[data-k="5"]{--k:var(--c5)}[data-k="6"]{--k:var(--c6)}
+
+/* scenes */
+.scene{position:absolute;left:60px;right:60px;top:122px;bottom:30px;opacity:0;visibility:hidden;transition:opacity .6s,visibility 0s .6s}
+.scene.active{opacity:1;visibility:visible;transition:opacity .6s}
+.scene > *{position:absolute}
+[data-s]{opacity:0;transform:translateY(10px);transition:opacity .55s ease,transform .55s ease}
+[data-s].on{opacity:1;transform:none}
+.h2{font-size:36px;font-weight:600;letter-spacing:-.015em;margin:0}
+.card{background:var(--st-card);border:1px solid var(--st-line);border-radius:14px}
+.mono{font-family:var(--mono)}
+.kv{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px dashed var(--st-line);font-size:19px}
+.kv:last-child{border-bottom:0}
+.kv span:first-child{color:var(--st-muted)}
+.kv.hl{background:rgba(47,91,211,.08);margin:0 -12px;padding:9px 12px;border-radius:8px;border-bottom-color:transparent}
+.ttl{font-size:20px;font-weight:600;margin-bottom:8px}
+.muted{color:var(--st-muted)}
+.banner{padding:16px 22px;border-radius:12px;color:#fff;font-size:22px;font-weight:600;line-height:1.35}
+.pill{display:inline-block;font-size:16px;font-weight:600;padding:6px 14px;border-radius:999px;background:var(--st-soft);border:1px solid var(--st-line);margin:0 6px 6px 0}
+.box{padding:12px 18px;font-size:20px;font-weight:600;border-radius:12px;background:var(--st-card);border:1px solid var(--st-line);text-align:center}
+.op{font-size:28px;color:var(--st-muted);font-weight:600}
+.arrowR{height:2px;background:var(--st-ink)}
+.arrowR::after{content:"";position:absolute;right:-2px;top:-6px;border-left:12px solid var(--st-ink);border-top:7px solid transparent;border-bottom:7px solid transparent}
+table.tbl{border-collapse:separate;border-spacing:0;font-size:17px;background:var(--st-card);border:1px solid var(--st-line);border-radius:12px;overflow:hidden;width:100%}
+.tbl th{text-align:left;font-weight:600;color:var(--st-muted);font-size:14px;padding:9px 12px;border-bottom:1px solid var(--st-line);background:var(--st-soft)}
+.tbl td{padding:8px 12px;border-bottom:1px solid #E5E9EF}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td.m{font-family:var(--mono);font-size:15px;transition:background .5s,color .5s}
+.colhl td.hc{background:rgba(181,54,122,.1);color:var(--c4);font-weight:500}
+.route{width:360px;top:56px;padding:20px;border-top:6px solid var(--c3);height:330px}
+.route b{display:block;font-size:22px;margin-bottom:6px}
+.route p{font-size:17px;color:var(--st-muted);margin:0 0 12px;line-height:1.4}
+.route ul{margin:0;padding:0 0 0 20px;font-size:18px;line-height:1.55}
+.step{display:flex;align-items:center;gap:14px}
+.qbox{width:430px;padding:14px 18px;font-size:19px;font-weight:500}
+.res{padding:10px 16px;border-radius:10px;color:#fff;font-weight:600;font-size:19px}
+.metric{width:208px;padding:16px;border-top:5px solid var(--c6)}
+.metric b{display:block;font-size:20px;margin-bottom:4px}
+.metric span{font-size:15px;color:var(--st-muted);line-height:1.35;display:block}
+.rc{width:360px;height:160px;padding:18px;border-top:6px solid var(--k)}
+.rc .n{font-size:16px;font-weight:700;color:var(--k)}
+.rc b{display:block;font-size:22px;margin:4px 0 6px}
+.rc p{margin:0;font-size:17px;color:var(--st-muted);line-height:1.4}
+.ok{color:var(--c2);font-weight:700}.no{color:var(--bad);font-weight:700}
+.stepn{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--k);color:#fff;font-weight:700;font-size:15px;margin-right:10px;flex:0 0 30px}
+.li{display:flex;align-items:flex-start;font-size:19px;line-height:1.4;margin-bottom:14px}
+
+@media (prefers-reduced-motion: reduce){
+  [data-s],.scene,.chip{transition:none!important}
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Deal Creation to Campaign Execution Workflow</h1>
+    <p>A narrated walkthrough of how an OpenAP campaign moves from deal creation through distribution, delivery, and measurement.</p>
+  </header>
+
+  <section class="player" aria-label="Explainer video">
+    <div class="screen" id="screen">
+      <div class="stage" id="stage" aria-hidden="true">
+        <div class="pipe">
+          <div class="chip" data-k="1"><span class="n">1</span>Deal</div><div class="link"></div>
+          <div class="chip" data-k="2"><span class="n">2</span>Identity solution</div><div class="link"></div>
+          <div class="chip" data-k="3"><span class="n">3</span>Distribution</div><div class="link"></div>
+          <div class="chip" data-k="4"><span class="n">4</span>Delivery logs</div><div class="link"></div>
+          <div class="chip" data-k="5"><span class="n">5</span>Mapping</div><div class="link"></div>
+          <div class="chip" data-k="6"><span class="n">6</span>Measurement</div>
+        </div>
+
+        <!-- 0 overview -->
+        <div class="scene" data-scene="0">
+          <div data-s="0" style="left:0;top:110px;width:980px">
+            <div class="h2" style="font-size:58px;line-height:1.08;margin-bottom:18px">Deal Creation to<br>Campaign Execution Workflow</div>
+            <p style="font-size:26px;color:var(--st-muted);margin:0;line-height:1.4">How a campaign moves through OpenAP, one stage at a time.</p>
+          </div>
+          <p data-s="2" style="left:0;top:400px;font-size:21px;color:var(--st-muted);margin:0;max-width:820px;line-height:1.45">Along the way: deals and campaigns, Audience Records, Expressions, ARLs, impressions, crosswalks, and posts.</p>
+        </div>
+
+        <!-- 1 deal -->
+        <div class="scene" data-scene="1">
+          <div class="card" data-s="0" style="left:0;top:0;width:480px;padding:18px 24px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--st-line);padding-bottom:10px;margin-bottom:4px"><b style="font-size:24px">Deal</b><span class="mono" style="color:var(--c1);font-size:19px">Deal ID D-24817</span></div>
+            <div class="kv"><span>Advertiser / agency</span><span>Brightline Foods / Meridian</span></div>
+            <div data-s="1">
+              <div class="kv" id="dealType"><span>Deal type</span><span>Buy-side Upfront</span></div>
+              <div class="kv"><span>Quarter</span><span>Q1</span></div>
+              <div class="kv"><span>Flight dates</span><span>Jan 6 to Mar 30</span></div>
+              <div class="kv"><span>Total budget</span><span>$2.4M</span></div>
+              <div class="kv"><span>Audience</span><span>Frozen-meal shoppers</span></div>
+            </div>
+          </div>
+          <div data-s="2" style="left:0;top:430px;width:500px">
+            <span class="pill">Sell-side Upfront</span><span class="pill">Buy-side Upfront</span><span class="pill">Scatter</span>
+          </div>
+          <svg data-s="3" style="left:480px;top:0" width="140" height="420" viewBox="0 0 140 420"><path d="M0 200 C70 200 70 60 140 60 M0 200 L140 200 M0 200 C70 200 70 340 140 340" fill="none" stroke="#CDD4DE" stroke-width="3"/></svg>
+          <div data-s="3" style="left:630px;top:-6px;width:530px">
+            <div class="muted" style="font-size:17px;margin-bottom:10px">Campaigns under the deal (called orders in the UI)</div>
+          </div>
+          <div class="card" data-s="3" style="left:630px;top:28px;width:430px;padding:14px 18px;border-left:6px solid var(--c1)"><b style="font-size:20px">Campaign: NBCU</b><div class="muted" style="font-size:16px">Runs the deal on NBCU</div></div>
+          <div class="card" data-s="3" style="left:630px;top:168px;width:430px;padding:14px 18px;border-left:6px solid var(--c1)"><b style="font-size:20px">Campaign: Paramount</b><div class="muted" style="font-size:16px">Runs the deal on Paramount</div></div>
+          <div class="card" data-s="3" style="left:630px;top:308px;width:430px;padding:14px 18px;border-left:6px solid var(--c1)"><b style="font-size:20px">Campaign: Univision</b><div class="muted" style="font-size:16px">Runs the deal on Univision</div></div>
+          <div class="banner" data-s="4" style="left:630px;top:430px;width:530px;background:var(--c1)">Deal is the sale. Campaigns are where execution, delivery, and measurement happen.</div>
+        </div>
+
+        <!-- 2 audience record & expressions -->
+        <div class="scene" data-scene="2">
+          <div style="left:0;top:0;width:1160px;display:flex;align-items:center;justify-content:center;gap:16px">
+            <div class="box" data-s="0">Advertiser audience</div><div class="op" data-s="1">+</div>
+            <div class="box" data-s="1">Identity Protocol (IDP)</div><div class="op" data-s="2">=</div>
+            <div class="box" data-s="2" style="background:var(--c2);color:#fff;border-color:var(--c2)">Audience Record</div>
+          </div>
+          <div data-s="2" style="left:0;top:74px;width:1160px;text-align:center;font-size:17px;color:var(--st-muted)">Household-level source of truth for who is in target. Refreshed over time; each version is kept.</div>
+          <div data-s="3" style="left:0;top:122px;width:1160px;text-align:center;font-size:17px;font-weight:600">One Expression per partner, in that partner's format</div>
+          <div class="card" data-s="3" style="left:0;top:156px;width:275px;padding:14px;border-top:5px solid var(--c2)"><b style="font-size:19px">Expression for NBCU</b><div class="muted" style="font-size:15px">Direct integration format</div></div>
+          <div class="card" data-s="3" style="left:295px;top:156px;width:275px;padding:14px;border-top:5px solid var(--c2)"><b style="font-size:19px">Expression for FreeWheel</b><div class="muted" style="font-size:15px">Ad-server format</div></div>
+          <div class="card" data-s="3" style="left:590px;top:156px;width:275px;padding:14px;border-top:5px solid var(--c2)"><b style="font-size:19px">Expression for LiveRamp</b><div class="muted" style="font-size:15px">Intermediary format</div></div>
+          <div class="card" data-s="3" style="left:885px;top:156px;width:275px;padding:14px;border-top:5px solid var(--c2)"><b style="font-size:19px">Expression for VideoAmp</b><div class="muted" style="font-size:15px">Measurement partner IDs</div></div>
+          <div data-s="4" style="left:0;top:270px;width:700px">
+            <div class="ttl">Distributions: one Expression to one partner, at one time</div>
+            <table class="tbl"><thead><tr><th>Expression</th><th>Partner</th><th>Sent</th></tr></thead>
+              <tbody><tr><td class="m">EXP-1041</td><td>NBCU</td><td>Jan 3</td></tr><tr><td class="m">EXP-1042</td><td>FreeWheel</td><td>Jan 3</td></tr><tr><td class="m">EXP-1041</td><td>NBCU</td><td>Jan 10, refreshed audience</td></tr></tbody></table>
+          </div>
+          <div class="banner" data-s="5" style="left:760px;top:300px;width:400px;background:var(--c2)">One audience. One source of truth. Many Expressions.</div>
+        </div>
+
+        <!-- 3 distribution -->
+        <div class="scene" data-scene="3">
+          <div class="h2" data-s="0" style="left:0;top:0">Three routes to publishers</div>
+          <div class="card route" data-s="1" style="left:0">
+            <b>Direct integration</b><p>Each follows the publisher's own agreement.</p>
+            <ul><li>NBCU</li><li>Warner Bros. Discovery: clean room, hashed IDs</li><li>Univision: file delivery</li></ul>
+          </div>
+          <div class="card route" data-s="2" style="left:400px">
+            <b>FreeWheel</b><p>For publishers that serve their ads with FreeWheel.</p>
+            <ul><li>OpenAP builds an Expression in FreeWheel's format</li><li>Delivered to FreeWheel, which serves the ads</li></ul>
+          </div>
+          <div class="card route" data-s="3" style="left:800px">
+            <b>Intermediaries</b><p>Audience distribution partners: LiveRamp and Cadent.</p>
+            <ul style="columns:2;column-gap:18px"><li>A+E</li><li>Paramount</li><li>Disney/Hulu</li><li>AMC</li><li>Tubi</li><li>Future Today</li><li>Screen Vision Media</li></ul>
+          </div>
+          <div class="banner" data-s="4" style="left:0;top:412px;width:1160px;background:var(--c3);display:flex;align-items:center;gap:18px">Then the campaign runs:<span class="pill" style="background:#fff;color:var(--st-ink);margin:0">Linear</span><span class="pill" style="background:#fff;color:var(--st-ink);margin:0">Streaming</span><span class="pill" style="background:#fff;color:var(--st-ink);margin:0">Digital</span></div>
+        </div>
+
+        <!-- 4 delivery logs -->
+        <div class="scene" data-scene="4" id="sc4">
+          <div class="h2" data-s="0" style="left:0;top:0">What publishers send back</div>
+          <div data-s="1" style="left:0;top:62px;width:540px">
+            <div class="ttl" style="color:var(--c4)">Linear: As Run Logs (ARLs)</div>
+            <table class="tbl"><thead><tr><th>Network</th><th>Program</th><th>Aired</th><th>Length</th></tr></thead>
+              <tbody><tr><td>NBC</td><td>Evening drama</td><td>Jan 14, 9:12 PM</td><td>:30</td></tr><tr><td>NBC</td><td>Late news</td><td>Jan 14, 11:21 PM</td><td>:15</td></tr><tr><td>AMC</td><td>Movie block</td><td>Jan 15, 8:40 PM</td><td>:30</td></tr></tbody></table>
+          </div>
+          <div data-s="2" style="left:0;top:300px;width:540px">
+            <div class="muted" style="font-size:16px;margin-bottom:8px">ARLs from publishers including</div>
+            <span class="pill">AMC</span><span class="pill">NBCU</span><span class="pill">Univision</span><span class="pill">Paramount</span>
+            <p style="font-size:18px;margin:10px 0 0;line-height:1.4">The record linear measurement is checked against.</p>
+          </div>
+          <div data-s="3" style="left:590px;top:62px;width:570px">
+            <div class="ttl" style="color:var(--c4)">Digital and streaming: impression records</div>
+            <div class="muted" style="font-size:16px;margin:-2px 0 10px">Often through data clean rooms, e.g. Paramount via Snowflake</div>
+          </div>
+          <div data-s="4" style="left:590px;top:130px;width:570px">
+            <table class="tbl"><thead><tr><th>Pub campaign ID</th><th>Timestamp</th><th>IP</th><th>Device ID</th></tr></thead>
+              <tbody><tr><td class="m">PAR-77310</td><td class="m">01-14 21:12</td><td class="m hc">203.0.113.24</td><td class="m hc">a3f1…9c2e</td></tr><tr><td class="m">PAR-77310</td><td class="m">01-14 21:40</td><td class="m hc">198.51.100.7</td><td class="m hc">7b02…41aa</td></tr><tr><td class="m">PAR-77310</td><td class="m">01-15 08:03</td><td class="m hc">203.0.113.90</td><td class="m hc">e91c…0d37</td></tr></tbody></table>
+            <p style="font-size:16px;color:var(--st-muted);margin:8px 0 0">One row per ad view. Values are illustrative.</p>
+          </div>
+          <div class="banner" data-s="5" style="left:590px;top:330px;width:570px;background:var(--c4)">IP and device ID connect each impression back to a household.</div>
+        </div>
+
+        <!-- 5 mapping -->
+        <div class="scene" data-scene="5">
+          <div class="h2" data-s="0" style="left:0;top:0">Tying delivery to the right campaign</div>
+          <div class="card" data-s="1" style="left:0;top:70px;width:400px;padding:18px;border-left:6px solid var(--c5)"><div class="muted" style="font-size:16px">OpenAP campaign</div><b style="font-size:22px">Paramount, Deal D-24817</b></div>
+          <div class="arrowR" data-s="1" style="left:420px;top:112px;width:320px"></div>
+          <div data-s="1" style="left:420px;top:76px;width:320px;text-align:center;font-size:17px;font-weight:600;color:var(--c5)">Campaign mapping</div>
+          <div class="card" data-s="1" style="left:760px;top:70px;width:400px;padding:18px"><div class="muted" style="font-size:16px">Publisher's campaign ID</div><b class="mono" style="font-size:22px">PAR-77310</b></div>
+          <div class="card" data-s="2" style="left:0;top:190px;width:560px;padding:18px">
+            <div class="muted" style="font-size:16px;margin-bottom:8px">Campaign Manager</div>
+            <div style="font-size:18px;font-weight:600;margin-bottom:6px">Publisher Campaign ID</div>
+            <div class="mono" style="font-size:19px;border:2px solid var(--c5);border-radius:8px;padding:10px 12px">PAR-77310</div>
+          </div>
+          <div data-s="2" style="left:600px;top:190px;width:560px">
+            <div class="li"><span class="ok" style="margin-right:12px">✓</span><span><span class="mono">PAR-77310</span> impressions match, then link to the campaign's Expression and Audience Record</span></div>
+          </div>
+          <div data-s="3" style="left:600px;top:270px;width:560px">
+            <div class="li"><span class="no" style="margin-right:12px">✕</span><span><span class="mono">PAR-80012</span> has no mapping: "no campaign match," nothing measured</span></div>
+          </div>
+          <div class="banner" data-s="4" style="left:0;top:400px;width:1160px;background:var(--c5)">Linear works the same way: each ARL must be tied to its OpenAP campaign before it can be posted.</div>
+        </div>
+
+        <!-- 6 resolving -->
+        <div class="scene" data-scene="6">
+          <div class="h2" data-s="0" style="left:0;top:0">Which household saw the ad?</div>
+          <div class="card" data-s="1" style="left:0;top:66px;width:300px;padding:16px">
+            <div class="muted" style="font-size:16px">One impression</div>
+            <div class="mono" style="font-size:16px;margin:8px 0">IP 203.0.113.24<br>Device a3f1…9c2e</div>
+            <div style="font-size:16px;color:var(--c6);font-weight:600">Encoded into privacy-safe IDs, strongest signals tried first</div>
+          </div>
+          <div class="step" data-s="2" style="left:340px;top:66px"><div class="card qbox">1. In the Audience Record that was live when it aired?</div><div class="res" style="background:var(--c6)">In-target</div></div>
+          <div class="step" data-s="3" style="left:340px;top:156px"><div class="card qbox">2. If not, in OpenAP's broader identity data?</div><div class="res" style="background:#8A94A6">Out-of-target</div></div>
+          <div class="step" data-s="4" style="left:340px;top:246px"><div class="card qbox">3. No household found anywhere</div><div class="res" style="background:#B0B7C3">Unmatched</div></div>
+          <div class="card" data-s="5" style="left:0;top:350px;width:1160px;padding:18px 22px;border-left:6px solid var(--c6)">
+            <b style="font-size:22px">Audience Fidelity</b>
+            <div style="font-size:19px;margin:6px 0 12px">In-target impressions as a share of all impressions that carry identifiers</div>
+            <div style="display:flex;height:22px;border-radius:6px;overflow:hidden"><span style="flex:72;background:var(--c6)"></span><span style="flex:28;background:#C9CED7"></span></div>
+          </div>
+        </div>
+
+        <!-- 7 partner ids -->
+        <div class="scene" data-scene="7">
+          <div class="h2" data-s="0" style="left:0;top:0">Translating into each partner's IDs</div>
+          <div data-s="1" style="left:0;top:70px;width:1160px;display:flex;align-items:center;gap:14px">
+            <div class="box">Impression</div><div class="op">›</div><div class="box">OpenAP household</div><div class="op">›</div><div class="box" style="border:2px solid var(--c6)">Crosswalk</div><div class="op">›</div><div class="box">Partner's own ID</div>
+          </div>
+          <div class="card" data-s="2" style="left:0;top:170px;width:560px;padding:18px">
+            <div class="muted" style="font-size:16px;margin-bottom:10px">Example chain</div>
+            <div style="font-size:19px;line-height:1.9">OpenAP household<br>› Experian person identity<br>› VideoAmp ID</div>
+            <div class="muted" style="font-size:15px;margin-top:8px">Experian supplies the file linking its IDs to VideoAmp's.</div>
+          </div>
+          <div data-s="3" style="left:600px;top:170px;width:560px">
+            <div class="ttl">What the crosswalk holds</div>
+            <table class="tbl"><thead><tr><th>Identity partner ID</th><th>Measurement partner ID</th></tr></thead>
+              <tbody><tr><td class="m">EXP-55120934</td><td class="m">VA-0x8812f</td></tr><tr><td class="m">EXP-55120981</td><td class="m">VA-0x8c04a</td></tr></tbody></table>
+            <p style="font-size:17px;margin:10px 0 0">ID pairs only. No emails, IPs, or addresses.</p>
+          </div>
+          <div class="card" data-s="4" style="left:0;top:400px;width:1160px;padding:16px 22px">
+            <div style="font-size:19px;margin-bottom:10px">Coverage: a partner receives only the exposures the crosswalk can reach</div>
+            <div style="display:flex;height:20px;border-radius:6px;overflow:hidden"><span style="flex:80;background:var(--c6)"></span><span style="flex:20;background:#C9CED7"></span></div>
+          </div>
+        </div>
+
+        <!-- 8 measurement -->
+        <div class="scene" data-scene="8">
+          <div class="h2" data-s="0" style="left:0;top:0">How partners measure</div>
+          <div class="card" data-s="1" style="left:0;top:66px;width:560px;height:330px;padding:20px;border-top:6px solid var(--c6)">
+            <b style="font-size:24px;display:block;margin-bottom:14px">Linear</b>
+            <div class="li" data-k="6"><span class="stepn">1</span><span>OpenAP sends each partner an Expression in its own IDs: Nielsen, VideoAmp, Comscore, 605</span></div>
+            <div class="li" data-k="6" data-s="2"><span class="stepn">2</span><span>Partner matches the audience against its viewing data for the airings in the ARL</span></div>
+            <div class="li" data-k="6" data-s="2"><span class="stepn">3</span><span>Calculates reach, impressions, and frequency</span></div>
+          </div>
+          <div class="card" data-s="3" style="left:600px;top:66px;width:560px;height:330px;padding:20px;border-top:6px solid var(--c6)">
+            <b style="font-size:24px;display:block;margin-bottom:14px">Digital</b>
+            <div class="li" data-k="6"><span class="stepn">1</span><span>Partners receive impression-level exposure records, translated into their own IDs</span></div>
+            <div class="li" data-k="6" data-s="4"><span class="stepn">2</span><span>Partner measures reach and frequency directly from those exposures</span></div>
+          </div>
+          <div class="banner" data-s="5" style="left:0;top:420px;width:1160px;background:var(--c6)">Linear: exposure inferred from viewing data and the airing schedule. Digital: one record per impression.</div>
+        </div>
+
+        <!-- 9 post results -->
+        <div class="scene" data-scene="9">
+          <div class="h2" data-s="0" style="left:0;top:0">Posts and post results</div>
+          <div class="muted" data-s="0" style="left:0;top:48px;font-size:18px">Post: short for post-buy analysis. Delivered versus planned.</div>
+          <div class="card" data-s="1" style="left:0;top:92px;width:520px;padding:16px 20px">
+            <div class="muted" style="font-size:15px">A Post, created for a campaign</div>
+            <div style="margin-top:8px"><span class="pill">Linear Post</span><span class="pill">Combined Post</span></div>
+            <div class="muted" style="font-size:15px;margin-top:4px">Types: Standalone, Stewardship, Final</div>
+          </div>
+          <div class="card" data-s="2" style="left:560px;top:92px;width:600px;padding:16px 20px;display:flex;align-items:center;gap:14px;font-size:19px;font-weight:600">
+            <span>Audience Record</span><span class="op">vs</span><span>What the publisher delivered</span>
+          </div>
+          <div data-s="3" style="left:0;top:230px;width:1160px;display:flex;gap:30px">
+            <div class="card metric"><b>Reach</b><span>Households in the target audience that saw the ad</span></div>
+            <div class="card metric"><b>Impressions</b><span>Total ad views delivered</span></div>
+            <div class="card metric"><b>Avg. frequency</b><span>How often each reached household saw it</span></div>
+            <div class="card metric"><b>Audience index</b><span>How concentrated delivery was on the target</span></div>
+            <div class="card metric"><b>Universe</b><span>The population results are measured against</span></div>
+          </div>
+          <div data-s="4" style="left:0;top:396px;width:1160px;display:flex;gap:16px;font-size:17px">
+            <div class="card" style="flex:1;padding:14px 16px"><b>Measurement partners</b><div class="muted">Return measured results</div></div>
+            <div class="card" style="flex:1;padding:14px 16px"><b>OpenAP's Nielsen-based engine</b><div class="muted">Ratings and universe estimates</div></div>
+            <div class="card" style="flex:1;padding:14px 16px"><b>OpenAP's digital metrics</b><div class="muted">Including Audience Fidelity</div></div>
+          </div>
+          <div data-s="5" style="left:0;top:486px;width:1160px;font-size:20px;font-weight:600;color:var(--c6)">All recorded in OpenAP's platform as the campaign's post results.</div>
+        </div>
+
+        <!-- 10 recap -->
+        <div class="scene" data-scene="10">
+          <div class="h2" data-s="0" style="left:0;top:0">Recap</div>
+          <div class="card rc" data-k="1" data-s="0" style="left:0;top:60px"><span class="n">1</span><b>Deal</b><p>Sold once, can include multiple publishers, and runs as one campaign per publisher.</p></div>
+          <div class="card rc" data-k="2" data-s="1" style="left:400px;top:60px"><span class="n">2</span><b>Identity solution</b><p>Each publisher receives its own Expression, which ties back to the Audience Record.</p></div>
+          <div class="card rc" data-k="3" data-s="2" style="left:800px;top:60px"><span class="n">3</span><b>Distribution</b><p>Direct, FreeWheel, or intermediaries. Then the campaign runs.</p></div>
+          <div class="card rc" data-k="4" data-s="3" style="left:0;top:250px"><span class="n">4</span><b>Delivery logs</b><p>ARLs for linear, impression records for digital.</p></div>
+          <div class="card rc" data-k="5" data-s="3" style="left:400px;top:250px"><span class="n">5</span><b>Mapping</b><p>Delivery tied back to the right OpenAP campaign.</p></div>
+          <div class="card rc" data-k="6" data-s="4" style="left:800px;top:250px"><span class="n">6</span><b>Measurement</b><p>Resolved, translated to partner IDs, measured, and posted.</p></div>
+          <div data-s="5" style="left:0;top:440px;width:1160px;font-size:24px;font-weight:600;line-height:1.35">Results are measured against the same Audience Record the campaign was built on.</div>
+        </div>
+      </div>
+
+      <div class="poster" id="poster">
+        <button id="start" type="button">Play the walkthrough</button>
+        <small id="posterNote">With voiceover and captions.</small>
+      </div>
+    </div>
+
+    <div class="caption" id="caption" aria-live="polite"></div>
+    <div class="controls">
+      <button id="prev" type="button" aria-label="Previous step">Back</button>
+      <button id="play" class="primary" type="button">Play</button>
+      <button id="next" type="button" aria-label="Next step">Next</button>
+      <span class="spacer"></span>
+      <span class="time" id="time"></span>
+      <button id="voice" type="button" aria-pressed="true">Voice on</button>
+      <button id="speed" type="button">Speed 1×</button>
+      <button id="cc" type="button" aria-pressed="true">Captions on</button>
+    </div>
+    <nav class="chapters" id="chapters" aria-label="Chapters"></nav>
+  </section>
+</main>
+
+<script>
+(function(){
+  const ALL=[1,2,3,4,5,6];
+  const scenes = [
+    {name:"Overview", stage:[], cues:[
+      {t:"Welcome. This walkthrough follows a campaign at OpenAP, from the moment a deal is created to the moment results come back."},
+      {t:"There are six stages: deal creation, OpenAP's identity solution, distribution to publishers, delivery logs, mapping to campaigns, and measurement and post results.", stage:ALL},
+      {t:"Along the way, we'll explain the terms you'll hear every day, so the whole flow makes sense from end to end.", stage:ALL}
+    ]},
+    {name:"The deal", stage:[1], cues:[
+      {t:"It starts with a deal. A deal is the unit of sale: it ties an advertiser's audience to a buy, usually placed through an agency or by the brand directly."},
+      {t:"Every deal gets a Deal ID, and carries the key commercial details: the advertiser and agency, the deal type, the quarter and flight dates, the total budget, and the audience being targeted."},
+      {t:"The deal type describes how it was sold: a sell-side upfront, a buy-side upfront, or scatter. Upfronts are committed ahead of the TV season, while scatter is bought closer to air."},
+      {t:"A deal isn't the same thing as a campaign. Under each deal sit one or more campaigns, one per publisher. A campaign is how the deal actually runs on that publisher, and in the platform you'll also see campaigns called orders."},
+      {t:"Keep that split in mind. The deal is the sale; campaigns are where execution, delivery, and measurement happen."}
+    ]},
+    {name:"Audience Record and Expressions", stage:[2], cues:[
+      {t:"Next, the deal's audience moves into OpenAP's identity solution."},
+      {t:"The advertiser's audience is onboarded, and an Identity Protocol, or IDP, is applied to it. The IDP is a set of rules, like a recipe, for which identity data to use, and in what order.", say:"The advertiser's audience is onboarded, and an Identity Protocol, or I-D-P, is applied to it. The I-D-P is a set of rules, like a recipe, for which identity data to use, and in what order."},
+      {t:"The result is the Audience Record: the household-level version of the audience, and the source of truth for who is in target on the campaign. It's refreshed over time, and each version is kept."},
+      {t:"Publishers and measurement partners can't all read the same file, so OpenAP creates an Expression for each partner: a version of the Audience Record, formatted for that partner and keyed in identifiers it can use."},
+      {t:"Sending one Expression to one partner at one point in time is called a Distribution. Because every Distribution is recorded, OpenAP can always show who received which version of the audience, and when."},
+      {t:"One audience, one source of truth, many Expressions."}
+    ]},
+    {name:"Distribution", stage:[3], cues:[
+      {t:"Distribution takes three main routes, depending on how each publisher is set up."},
+      {t:"Some publishers have a direct integration with OpenAP, such as NBCU, Warner Bros. Discovery, and Univision. Each follows that publisher's own agreement. Univision receives a file delivery, for example, while Warner Bros. Discovery receives its audience inside a data clean room, with identifiers hashed."},
+      {t:"Other publishers serve their ads through FreeWheel, an ad-serving platform. For them, OpenAP creates an Expression in FreeWheel's format and delivers it to FreeWheel."},
+      {t:"And some publishers receive audiences through intermediaries: audience distribution partners such as LiveRamp and Cadent. This route covers publishers including A+E, Paramount, Disney and Hulu, AMC, Tubi, Future Today, and Screen Vision Media.", say:"And some publishers receive audiences through intermediaries: audience distribution partners such as LiveRamp and Cadent. This route covers publishers including A and E, Paramount, Disney and Hulu, AMC, Tubi, Future Today, and Screen Vision Media."},
+      {t:"Once the audience is in place, the campaign runs. Publishers activate it across their linear, streaming, and digital inventory."}
+    ]},
+    {name:"Delivery logs", stage:[4], cues:[
+      {t:"After the ads run, publishers report what actually happened. Linear TV and digital report it in different ways."},
+      {t:"For linear, publishers send As Run Logs, or ARLs. An ARL is the programmer's spot-level record of what aired: the network, the program, the date and time of each spot, and its length.", say:"For linear, publishers send As Run Logs, or A-R-Ls. An A-R-L is the programmer's spot-level record of what aired: the network, the program, the date and time of each spot, and its length."},
+      {t:"OpenAP takes in ARLs from publishers including AMC, NBCU, Univision, and Paramount. The ARL is the delivery record that linear measurement is checked against.", say:"OpenAP takes in A-R-Ls from publishers including AMC, NBCU, Univision, and Paramount. The A-R-L is the delivery record that linear measurement is checked against."},
+      {t:"For digital and streaming, publishers provide impression records, often through data clean rooms. Paramount, for example, shares its impressions with OpenAP through a Snowflake clean room."},
+      {t:"Each impression record is one ad view. It carries the publisher's campaign ID, a timestamp, the IP address, and the device's advertising ID."},
+      {t:"Those identifiers are what let OpenAP connect each impression back to a household."}
+    ]},
+    {name:"Mapping", stage:[5], cues:[
+      {t:"Before anything can be measured, delivery has to be tied back to the right campaign. That's what mapping does."},
+      {t:"Publishers report delivery against their own campaign IDs, not OpenAP's. A campaign mapping links the OpenAP campaign to the publisher's campaign ID."},
+      {t:"For digital, an OpenAP user enters the Publisher Campaign ID on the campaign in Campaign Manager. Impressions are matched on that ID, then linked to the campaign's Expression and Audience Record."},
+      {t:"This step matters more than it looks. If no one enters the ID, the impressions find no matching campaign, processing stops with a no campaign match status, and nothing is measured."},
+      {t:"Linear works on the same principle: each ARL has to be tied to the right OpenAP campaign before it can be posted.", say:"Linear works on the same principle: each A-R-L has to be tied to the right OpenAP campaign before it can be posted."}
+    ]},
+    {name:"Resolving impressions", stage:[6], cues:[
+      {t:"With impressions tied to a campaign, OpenAP works out which household saw each ad."},
+      {t:"Each impression's IP address and device ID are encoded into privacy-safe identifiers, then checked against a priority list, strongest signals first."},
+      {t:"First, OpenAP checks the Audience Record that was live when the ad aired. If the impression matches a household in it, it's marked in-target: the ad reached the audience the buyer defined."},
+      {t:"If not, OpenAP checks its broader identity data. A match there finds a real household that isn't in the audience, so the impression is marked out-of-target."},
+      {t:"Impressions that can't be matched to any household are labeled unmatched."},
+      {t:"This split powers Audience Fidelity: in-target impressions as a share of all impressions that carry identifiers. It answers the buyer's core question: is the audience I defined the audience I actually reached?"}
+    ]},
+    {name:"Partner IDs", stage:[6], cues:[
+      {t:"Measurement partners such as VideoAmp, Comscore, and iSpot don't use OpenAP's household IDs. Each has its own IDs for households and people."},
+      {t:"So OpenAP translates each resolved household into each partner's IDs, using a crosswalk: a table of ID pairs linking OpenAP's identity to each partner's."},
+      {t:"Those mappings often come from identity partners that have already matched their data to the measurement partner. Experian, for example, supplies a file linking its person identities to VideoAmp's, so OpenAP can go from a household, to Experian, to VideoAmp."},
+      {t:"The crosswalk holds only ID pairs. No emails, IPs, or addresses travel with it. The underlying matching happens upstream, under each partner's own agreements.", say:"The crosswalk holds only ID pairs. No emails, I-Ps, or addresses travel with it. The underlying matching happens upstream, under each partner's own agreements."},
+      {t:"One practical effect: a partner can only receive the exposures the crosswalk can reach. Households with no mapping to that partner can't be sent in its IDs."}
+    ]},
+    {name:"Measurement", stage:[6], cues:[
+      {t:"Now, measurement. Linear and digital work differently, because the delivery data is different."},
+      {t:"For linear, OpenAP sends each measurement partner, such as Nielsen, VideoAmp, Comscore, or 605, an Expression of the audience in that partner's own IDs.", say:"For linear, OpenAP sends each measurement partner, such as Nielsen, VideoAmp, Comscore, or six-oh-five, an Expression of the audience in that partner's own IDs."},
+      {t:"The partner matches the audience against its own viewing data for the campaign's airings, as recorded in the ARL, and calculates reach, impressions, and frequency.", say:"The partner matches the audience against its own viewing data for the campaign's airings, as recorded in the A-R-L, and calculates reach, impressions, and frequency."},
+      {t:"For digital, partners receive the actual exposures: impression-level records, already translated into their own IDs."},
+      {t:"The partner measures reach and frequency for the audience directly from those exposures."},
+      {t:"That's the key difference. Linear partners infer exposure from viewing data and the airing schedule, while digital partners see one record per impression."}
+    ]},
+    {name:"Post results", stage:[6], cues:[
+      {t:"All of this comes together in a post. The term comes from post-buy analysis: after the ads run, you post the campaign, comparing what was delivered against what was planned."},
+      {t:"In the platform, a Post is a measurement run created for a campaign. Linear Posts measure linear delivery against ARLs, and Combined Posts bring multiple publishers together. Post types include Standalone, Stewardship, and Final.", say:"In the platform, a Post is a measurement run created for a campaign. Linear Posts measure linear delivery against A-R-Ls, and Combined Posts bring multiple publishers together. Post types include Standalone, Stewardship, and Final."},
+      {t:"A Post checks the campaign's resolved audience, its Audience Record, against what the publisher actually delivered."},
+      {t:"The output is the post result: reach, meaning how many households in the target audience saw the ad; impressions; average frequency, how often each reached household saw it; audience index, how concentrated delivery was on the target; and universe figures, the population the results are measured against."},
+      {t:"Post results don't always come from the same place. Measurement partners return their results, OpenAP runs its own Nielsen-based engine for ratings and universe estimates, and OpenAP calculates its own digital metrics, such as Audience Fidelity."},
+      {t:"Wherever the numbers come from, they're recorded in OpenAP's platform as the campaign's post results."}
+    ]},
+    {name:"Recap", stage:ALL, cues:[
+      {t:"To recap. A deal is sold once and can include multiple publishers, running as one campaign per publisher."},
+      {t:"The audience becomes an Audience Record, and each publisher receives its own Expression, which ties back to that Audience Record."},
+      {t:"Expressions are distributed directly, through FreeWheel, or through intermediaries, and the campaign runs."},
+      {t:"Publishers report delivery through ARLs and impression records, which are mapped back to the right campaign.", say:"Publishers report delivery through A-R-Ls and impression records, which are mapped back to the right campaign."},
+      {t:"Impressions are resolved to households, translated into partner IDs, and measured."},
+      {t:"And the results come back as post results, measured against the same Audience Record the campaign was built on."}
+    ]}
+  ];
+
+  const screen=document.getElementById('screen'), stage=document.getElementById('stage');
+  function fit(){ stage.style.transform='scale('+(screen.clientWidth/1280)+')'; }
+  window.addEventListener('resize',fit); fit();
+
+  const sceneEls=[...stage.querySelectorAll('.scene')];
+  const chips=[...stage.querySelectorAll('.chip')];
+  const cap=document.getElementById('caption');
+  let si=0, ci=0, playing=false, token=0, timer=null, safety=null, ended=false;
+  let voiceOn=('speechSynthesis' in window), rate=1, voice=null;
+
+  function render(){
+    const sc=scenes[si], cue=sc.cues[ci];
+    sceneEls.forEach((el,i)=>{
+      el.classList.toggle('active', i===si);
+      el.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('on', i===si && +x.dataset.s<=ci));
+    });
+    document.getElementById('dealType').classList.toggle('hl', si===1 && ci===2);
+    document.getElementById('sc4').classList.toggle('colhl', si===4 && ci>=5);
+    const st=cue.stage||sc.stage;
+    chips.forEach(c=>c.classList.toggle('on', st.includes(+c.dataset.k)));
+    cap.textContent=cue.t;
+    updateChapters();
+  }
+
+  const chaptersEl=document.getElementById('chapters');
+  const wordsOf=s=>s.split(/\s+/).length;
+  const cueDur=c=>Math.max(2.2, wordsOf(c.say||c.t)/2.55)+0.5;
+  const total=scenes.reduce((a,s)=>a+s.cues.reduce((b,c)=>b+cueDur(c),0),0);
+  document.getElementById('posterNote').textContent='About '+Math.round(total/60)+' minutes, with voiceover and captions.';
+  scenes.forEach((s,i)=>{
+    const b=document.createElement('button'); b.type='button';
+    b.innerHTML='<span class="bar"><span class="fill"></span></span><span class="lbl">'+(i+1)+'. '+s.name+'</span>';
+    b.setAttribute('aria-label','Chapter '+(i+1)+': '+s.name);
+    b.title=s.name;
+    b.addEventListener('click',()=>jump(i,0));
+    chaptersEl.appendChild(b);
+  });
+  const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+  function updateChapters(){
+    [...chaptersEl.children].forEach((b,i)=>{
+      b.querySelector('.fill').style.width = i<si?'100%': i>si?'0%': ((ci+1)/scenes[i].cues.length*100)+'%';
+      b.classList.toggle('cur',i===si);
+    });
+    let el=0; for(let i=0;i<si;i++) scenes[i].cues.forEach(c=>el+=cueDur(c)); for(let j=0;j<ci;j++) el+=cueDur(scenes[si].cues[j]);
+    document.getElementById('time').textContent=fmt(el/rate)+' / '+fmt(total/rate);
+  }
+
+  function pickVoice(){
+    if(!('speechSynthesis' in window)) return;
+    const vs=speechSynthesis.getVoices().filter(v=>/^en(-|_|$)/i.test(v.lang));
+    const prefs=[/Natural/i,/Google US English/i,/Samantha/i,/Aria/i,/Jenny/i,/Ava/i,/Allison/i,/en-US/i];
+    for(const p of prefs){ const v=vs.find(v=>p.test(v.name)||p.test(v.lang)); if(v){voice=v;return;} }
+    voice=vs[0]||null;
+  }
+  if('speechSynthesis' in window){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
+  else { const vb=document.getElementById('voice'); vb.textContent='Voice unavailable'; vb.disabled=true; }
+
+  function stopAudio(){ token++; clearTimeout(timer); clearTimeout(safety); if('speechSynthesis' in window) speechSynthesis.cancel(); }
+  function playCue(){
+    stopAudio(); render();
+    const my=token, cue=scenes[si].cues[ci], dur=cueDur(cue)/rate*1000;
+    const done=()=>{ if(my!==token) return; clearTimeout(safety); const last=ci===scenes[si].cues.length-1; timer=setTimeout(()=>{ if(my===token) advance(); }, last?900:350); };
+    if(voiceOn && 'speechSynthesis' in window){
+      const u=new SpeechSynthesisUtterance(cue.say||cue.t);
+      if(voice) u.voice=voice; u.lang=voice?voice.lang:'en-US'; u.rate=0.98*rate;
+      u.onend=done; u.onerror=done;
+      speechSynthesis.speak(u);
+      safety=setTimeout(done, dur*2.2+4000);
+    } else timer=setTimeout(done, dur);
+  }
+  function advance(){
+    if(ci<scenes[si].cues.length-1) ci++;
+    else if(si<scenes.length-1){ si++; ci=0; }
+    else { setPlaying(false); render(); playBtn.textContent='Replay'; ended=true; return; }
+    playCue();
+  }
+  const playBtn=document.getElementById('play');
+  function setPlaying(p){ playing=p; playBtn.textContent=p?'Pause':'Play'; if(!p) stopAudio(); }
+  function play(){ document.getElementById('poster').classList.add('gone'); if(ended){si=0;ci=0;ended=false;} setPlaying(true); playCue(); }
+  function pause(){ setPlaying(false); render(); }
+  function jump(s,c){ ended=false; si=s; ci=c; document.getElementById('poster').classList.add('gone'); if(playing) playCue(); else { stopAudio(); render(); } }
+  function step(dir){
+    let s=si,c=ci+dir;
+    if(c<0){ if(s>0){ s--; c=scenes[s].cues.length-1; } else c=0; }
+    else if(c>=scenes[s].cues.length){ if(s<scenes.length-1){ s++; c=0; } else c=scenes[s].cues.length-1; }
+    jump(s,c);
+  }
+  document.getElementById('start').addEventListener('click',play);
+  playBtn.addEventListener('click',()=>playing?pause():play());
+  document.getElementById('prev').addEventListener('click',()=>step(-1));
+  document.getElementById('next').addEventListener('click',()=>step(1));
+  document.getElementById('voice').addEventListener('click',e=>{
+    voiceOn=!voiceOn; e.currentTarget.textContent=voiceOn?'Voice on':'Voice off'; e.currentTarget.setAttribute('aria-pressed',voiceOn);
+    if(playing) playCue();
+  });
+  const speeds=[1,1.25,0.85]; let sp=0;
+  document.getElementById('speed').addEventListener('click',e=>{
+    sp=(sp+1)%speeds.length; rate=speeds[sp]; e.currentTarget.textContent='Speed '+rate+'×';
+    if(playing) playCue(); else updateChapters();
+  });
+  document.getElementById('cc').addEventListener('click',e=>{
+    const off=cap.classList.toggle('hidden'); e.currentTarget.textContent=off?'Captions off':'Captions on'; e.currentTarget.setAttribute('aria-pressed',!off);
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.target.closest('button')&&(e.key===' '||e.key==='Enter')) return;
+    if(e.key===' '){ e.preventDefault(); playing?pause():play(); }
+    else if(e.key==='ArrowRight') step(1);
+    else if(e.key==='ArrowLeft') step(-1);
+  });
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden && playing) pause(); });
+  render();
+})();
+</script>
+</body>
+</html>
