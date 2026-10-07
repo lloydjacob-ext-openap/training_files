@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>From partner graph to Audience Record</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --page:#E6E9EE; --panel:#FFFFFF; --text:#1B2333; --muted:#5B6577; --rule:#CBD2DD; --btn:#1B2333; --btnText:#FFFFFF;
+  /* stage palette is fixed, like a video frame */
+  --st-bg:#F4F6F9; --st-ink:#1B2333; --st-muted:#5B6577; --st-line:#CDD4DE; --st-card:#FFFFFF;
+  --c1:#2F5BD3; --c2:#0E8A8A; --c3:#B87D00; --c4:#7B44C2;
+  --sans:"Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --page:#141A24; --panel:#1E2633; --text:#E7EBF2; --muted:#9AA4B5; --rule:#334055; --btn:#E7EBF2; --btnText:#141A24; }
+}
+:root[data-theme="dark"]{ --page:#141A24; --panel:#1E2633; --text:#E7EBF2; --muted:#9AA4B5; --rule:#334055; --btn:#E7EBF2; --btnText:#141A24; }
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;min-height:100%;background:var(--page);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+main{max-width:1120px;margin:0 auto;padding:28px 20px 40px}
+header h1{font-size:clamp(1.4rem,2.6vw,2rem);font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
+header p{margin:0 0 20px;color:var(--muted);font-size:1rem;max-width:68ch;line-height:1.5}
+
+/* player */
+.player{background:var(--panel);border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.screen{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;background:var(--st-bg)}
+.stage{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:0 0;background:var(--st-bg);color:var(--st-ink);font-family:var(--sans)}
+.caption{min-height:4.6em;padding:14px 22px;font-size:1.05rem;line-height:1.5;border-top:1px solid var(--rule);color:var(--text)}
+.caption.hidden{visibility:hidden}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--rule)}
+.controls button{font:inherit;font-size:.92rem;font-weight:500;border-radius:8px;border:1px solid var(--rule);background:transparent;color:var(--text);padding:8px 12px;cursor:pointer;min-height:40px}
+.controls button.primary{background:var(--btn);color:var(--btnText);border-color:var(--btn);min-width:88px}
+.controls button:focus-visible,.chapters button:focus-visible,.poster button:focus-visible{outline:3px solid var(--c1);outline-offset:2px}
+.controls .spacer{flex:1}
+.controls .time{color:var(--muted);font-variant-numeric:tabular-nums;font-size:.9rem}
+.chapters{display:flex;gap:4px;padding:0 16px 14px}
+.chapters button{flex:1;border:0;background:transparent;padding:6px 0 0;cursor:pointer;text-align:left;color:var(--muted);font:inherit;font-size:.75rem;min-width:0}
+.chapters .bar{display:block;height:6px;border-radius:3px;background:var(--rule);overflow:hidden;margin-bottom:6px}
+.chapters .fill{display:block;height:100%;width:0;background:var(--text);transition:width .4s linear}
+.chapters .lbl{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chapters button.cur .lbl{color:var(--text);font-weight:600}
+@media (max-width:640px){ .chapters .lbl{display:none} .caption{font-size:.95rem} }
+
+/* poster */
+.poster{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(244,246,249,.82);backdrop-filter:blur(2px);z-index:5;color:var(--st-ink);text-align:center;padding:16px}
+.poster.gone{display:none}
+.poster button{font:inherit;font-size:1.05rem;font-weight:600;background:#1B2333;color:#fff;border:0;border-radius:999px;padding:14px 26px;cursor:pointer}
+.poster small{color:var(--st-muted);font-size:.9rem;max-width:44ch;line-height:1.45}
+
+/* stage: pipeline */
+.pipe{position:absolute;left:60px;right:60px;top:34px;height:64px;display:flex;align-items:center}
+.chip{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:10px 18px 10px 10px;border-radius:12px;border:2px solid var(--st-line);background:var(--st-card);color:var(--st-muted);font-weight:600;font-size:19px;transition:all .5s}
+.chip .n{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--st-line);color:#fff;font-size:17px;transition:background .5s}
+.link{flex:1;height:2px;background:var(--st-line);margin:0 10px;position:relative}
+.link::after{content:"";position:absolute;right:-2px;top:-5px;border-left:9px solid var(--st-line);border-top:6px solid transparent;border-bottom:6px solid transparent}
+.chip.on{color:var(--st-ink);border-color:var(--k)}
+.chip.on .n{background:var(--k)}
+.chip[data-k="1"]{--k:var(--c1)} .chip[data-k="2"]{--k:var(--c2)} .chip[data-k="3"]{--k:var(--c3)} .chip[data-k="4"]{--k:var(--c4)}
+
+/* scenes */
+.scene{position:absolute;left:60px;right:60px;top:130px;bottom:36px;opacity:0;visibility:hidden;transition:opacity .6s,visibility 0s .6s}
+.scene.active{opacity:1;visibility:visible;transition:opacity .6s}
+[data-s]{opacity:0;transform:translateY(10px);transition:opacity .55s ease,transform .55s ease}
+[data-s].on{opacity:1;transform:none}
+.h2{font-size:40px;font-weight:600;letter-spacing:-.015em;margin:0 0 10px}
+.sub{font-size:22px;color:var(--st-muted);margin:0;line-height:1.4}
+.card{background:var(--st-card);border:1px solid var(--st-line);border-radius:14px;box-shadow:0 1px 0 rgba(27,35,51,.04)}
+.mono{font-family:var(--mono);font-size:.92em}
+
+/* s0 */
+.s0 .title{position:absolute;left:0;top:120px;width:900px}
+.s0 .title .h2{font-size:64px;line-height:1.05;margin-bottom:18px}
+.s0 .title .sub{font-size:26px}
+
+/* s1 */
+.s1 .left{position:absolute;left:0;top:30px;width:420px}
+.badges{display:flex;flex-direction:column;gap:12px;margin-top:28px}
+.badge{font-size:26px;font-weight:600;padding:14px 20px;border-radius:12px;background:var(--st-card);border:1px solid var(--st-line);border-left:6px solid var(--c1);width:300px}
+.s1 .person{position:absolute;left:520px;top:0;width:640px;padding:22px 26px}
+.person .hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--st-line);padding-bottom:12px;margin-bottom:6px}
+.person .hd b{font-size:22px}
+.person .hd .mono{font-size:22px;color:var(--c1);font-weight:500}
+.idrow{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px dashed var(--st-line);font-size:20px}
+.idrow:last-child{border-bottom:0}
+.idrow span:first-child{color:var(--st-muted)}
+.idrows [data-s]:nth-child(2){transition-delay:.08s}.idrows [data-s]:nth-child(3){transition-delay:.16s}.idrows [data-s]:nth-child(4){transition-delay:.24s}.idrows [data-s]:nth-child(5){transition-delay:.32s}.idrows [data-s]:nth-child(6){transition-delay:.4s}.idrows [data-s]:nth-child(7){transition-delay:.48s}
+.graphtag{position:absolute;left:0;top:400px;width:440px;padding:18px 22px;border-radius:12px;background:var(--c1);color:#fff;font-size:24px;font-weight:600;line-height:1.35}
+
+/* s2 */
+.box{position:absolute;width:300px;height:380px;padding:24px;display:flex;flex-direction:column;justify-content:center;gap:8px}
+.box b{font-size:28px;line-height:1.15}
+.box span{font-size:19px;color:var(--st-muted)}
+.s2 .src{left:0;top:60px;border-top:6px solid var(--c1)}
+.s2 .dst{right:0;top:60px;border-top:6px solid var(--c2)}
+.lane{position:absolute;left:330px;right:330px;height:110px}
+.lane .lt{font-size:22px;font-weight:600;text-align:center}
+.lane .ls{font-size:17px;color:var(--st-muted);text-align:center;margin-top:2px}
+.lane .track{position:relative;height:2px;background:var(--st-line);margin-top:14px}
+.lane .pk{position:absolute;top:-6px;left:0;width:14px;height:14px;border-radius:50%;background:var(--c1);opacity:0}
+.lane.on .pk{animation:travel 2.6s linear infinite}
+.lane.on .pk:nth-child(2){animation-delay:.87s}.lane.on .pk:nth-child(3){animation-delay:1.74s}
+.lane.optional .pk{background:transparent;border:3px solid var(--c1)}
+.lane.request .pk{border-radius:3px}
+@keyframes travel{0%{left:0;opacity:0}10%{opacity:1}90%{opacity:1}100%{left:calc(100% - 14px);opacity:0}}
+
+/* s3 */
+.s3 .mini{position:absolute;left:0;top:70px;width:280px;padding:20px}
+.s3 .mini b{display:block;font-size:20px;margin-bottom:6px}
+.s3 .mini .mono{color:var(--c1);font-size:20px}
+.s3 .mini p{margin:10px 0 0;color:var(--st-muted);font-size:18px;line-height:1.4}
+.s3 .arrow{position:absolute;left:300px;top:150px;width:90px;height:2px;background:var(--st-ink)}
+.s3 .arrow::after{content:"";position:absolute;right:-2px;top:-6px;border-left:12px solid var(--st-ink);border-top:7px solid transparent;border-bottom:7px solid transparent}
+table.rows{position:absolute;left:420px;top:0;width:740px;border-collapse:separate;border-spacing:0;font-size:19px;background:var(--st-card);border:1px solid var(--st-line);border-radius:14px;overflow:hidden}
+.rows th{text-align:left;font-weight:600;color:var(--st-muted);font-size:16px;padding:12px 16px;border-bottom:1px solid var(--st-line);background:#EEF1F5}
+.rows td{padding:10px 16px;border-bottom:1px solid #E5E9EF}
+.rows tr:last-child td{border-bottom:0}
+.rows td.pid{font-family:var(--mono);font-size:17px;transition:background .5s,color .5s}
+.s3.hl td.pid{background:rgba(14,138,138,.12);color:var(--c2);font-weight:500}
+.rows tbody tr[data-s]:nth-child(2){transition-delay:.07s}.rows tbody tr[data-s]:nth-child(3){transition-delay:.14s}.rows tbody tr[data-s]:nth-child(4){transition-delay:.21s}.rows tbody tr[data-s]:nth-child(5){transition-delay:.28s}.rows tbody tr[data-s]:nth-child(6){transition-delay:.35s}.rows tbody tr[data-s]:nth-child(7){transition-delay:.42s}.rows tbody tr[data-s]:nth-child(8){transition-delay:.49s}
+
+/* s4 */
+.steps4{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.pill{font-size:19px;font-weight:600;padding:8px 16px;border-radius:999px;background:#FFF5DC;color:#7A5200;border:1px solid #EBCB7A}
+.sep{color:var(--st-muted);font-size:20px}
+.s4 table.rows{position:static;width:100%}
+.s4 .rows td{padding:8px 16px}
+.type{display:inline-block;font-weight:700;font-size:16px;padding:3px 10px;border-radius:6px;color:#fff;background:var(--c3);letter-spacing:.02em}
+.type.h{background:var(--c4)}
+.s4 tr.hoid td{background:rgba(123,68,194,.08)}
+.oid{font-family:var(--mono);font-size:16px;color:var(--st-muted)}
+.note{position:absolute;right:0;bottom:-6px;font-size:15px;color:var(--st-muted)}
+
+/* s5 */
+.s5 .grid{display:grid;grid-template-columns:1fr 90px 1fr;row-gap:18px;align-items:center;margin-top:20px}
+.s5 .colh{font-size:26px;font-weight:600;text-align:center;padding-bottom:6px}
+.s5 .cell{padding:16px 18px;text-align:center}
+.s5 .cell small{display:block;font-size:15px;color:var(--st-muted);margin-bottom:6px}
+.s5 .cell .mono{font-size:19px}
+.s5 .sym{font-size:44px;font-weight:600;text-align:center}
+.s5 .neq{color:#C2410C}.s5 .eq{color:var(--c2)}
+.s5 .cmp{border:2px solid var(--c2)}
+.s5 .takeaway{margin-top:26px;font-size:24px;font-weight:600;text-align:center}
+
+/* s6 */
+.formula{display:flex;align-items:center;justify-content:center;gap:16px}
+.fx{font-size:22px;font-weight:600;padding:12px 20px;border-radius:12px;background:var(--st-card);border:1px solid var(--st-line)}
+.fx.ar{background:var(--c4);color:#fff;border-color:var(--c4)}
+.fop{font-size:30px;color:var(--st-muted);font-weight:600}
+.field{position:absolute;left:0;right:0;top:110px;bottom:0}
+.aud{position:absolute;left:40px;top:20px;width:200px;height:400px;border:2px dashed var(--st-line);border-radius:14px}
+.aud b{position:absolute;left:0;right:0;top:-34px;text-align:center;font-size:19px;color:var(--st-muted);font-weight:600}
+.dot{position:absolute;width:22px;height:22px;border-radius:50%;background:var(--c2);transition:transform 1.4s cubic-bezier(.5,0,.2,1),background .6s;z-index:2}
+.dot.prob{background:#8A94A6}
+.dot.go{transform:translate(var(--tx),var(--ty))}
+.houses{position:absolute;left:520px;top:0;width:640px;height:440px}
+.house{position:absolute;width:150px;height:150px}
+.house svg{width:100%;height:100%;display:block}
+.house .roof,.house .body{fill:var(--st-card);stroke:var(--st-line);stroke-width:4;transition:stroke .6s,fill .6s}
+.house.det .roof,.house.det .body{stroke:var(--c2);fill:#E6F4F4}
+.house.prb .roof,.house.prb .body{stroke:#8A94A6;stroke-dasharray:10 8;fill:#F0F2F5}
+.arframe{position:absolute;left:500px;top:-14px;width:680px;height:470px;border:4px solid var(--c4);border-radius:18px}
+.arframe span{position:absolute;right:20px;bottom:12px;font-size:20px;font-weight:600;color:var(--c4)}
+.legend{position:absolute;left:280px;top:120px;width:200px;font-size:17px;line-height:1.5;color:var(--st-muted)}
+.legend div{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.legend i{flex:0 0 16px;height:16px;border-radius:50%}
+
+/* s7 */
+.recap{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:40px}
+.rc{padding:22px;border-top:6px solid var(--k);min-height:250px}
+.rc .n{font-size:18px;font-weight:700;color:var(--k)}
+.rc b{display:block;font-size:24px;margin:8px 0 10px;line-height:1.2}
+.rc p{margin:0;font-size:19px;color:var(--st-muted);line-height:1.45}
+.rc[data-k="1"]{--k:var(--c1)}.rc[data-k="2"]{--k:var(--c2)}.rc[data-k="3"]{--k:var(--c3)}.rc[data-k="4"]{--k:var(--c4)}
+.closing{margin-top:34px;font-size:26px;font-weight:600;line-height:1.35;max-width:1000px}
+
+@media (prefers-reduced-motion: reduce){
+  [data-s],.scene,.dot,.chip{transition:none!important}
+  .lane.on .pk{animation:none;opacity:1;left:calc(50% - 7px)}
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>From partner graph to Audience Record</h1>
+    <p>A narrated walkthrough of how OpenAP takes identity partner data, encodes it with Open Identity, and resolves audiences to households.</p>
+  </header>
+
+  <section class="player" aria-label="Explainer video">
+    <div class="screen" id="screen">
+      <div class="stage" id="stage" aria-hidden="true">
+        <div class="pipe" id="pipe">
+          <div class="chip" data-k="1"><span class="n">1</span>Identity partners</div><div class="link"></div>
+          <div class="chip" data-k="2"><span class="n">2</span>Identity solution</div><div class="link"></div>
+          <div class="chip" data-k="3"><span class="n">3</span>OID creation</div><div class="link"></div>
+          <div class="chip" data-k="4"><span class="n">4</span>Audience Record</div>
+        </div>
+
+        <!-- 0 intro -->
+        <div class="scene s0" data-scene="0">
+          <div class="title">
+            <div class="h2" data-s="0">From partner graph<br>to Audience Record</div>
+            <p class="sub" data-s="0">How OpenAP builds audiences on Open Identity, in four stages.</p>
+          </div>
+        </div>
+
+        <!-- 1 partners -->
+        <div class="scene s1" data-scene="1">
+          <div class="left">
+            <div class="h2" data-s="0">Identity partners</div>
+            <p class="sub" data-s="0">Graph providers that link people to their identifiers.</p>
+            <div class="badges" data-s="0">
+              <div class="badge">TransUnion</div><div class="badge">Experian</div><div class="badge">Acxiom</div>
+            </div>
+          </div>
+          <div class="card person" data-s="1">
+            <div class="hd"><b>Partner person ID</b><span class="mono">TU-0048213</span></div>
+            <div class="idrows">
+              <div class="idrow" data-s="2"><span>Name</span><span>Jordan Rivera</span></div>
+              <div class="idrow" data-s="2"><span>Postal address</span><span>48 Maple Ave, Columbus OH</span></div>
+              <div class="idrow" data-s="2"><span>Email</span><span>jrivera@example.com</span></div>
+              <div class="idrow" data-s="2"><span>Phone</span><span>(614) 555-0147</span></div>
+              <div class="idrow" data-s="2"><span>Household ID</span><span class="mono">TU-HH-551902</span></div>
+              <div class="idrow" data-s="2"><span>IP address</span><span class="mono">203.0.113.24</span></div>
+              <div class="idrow" data-s="2"><span>Device ID</span><span class="mono">a3f1…9c2e</span></div>
+            </div>
+          </div>
+          <div class="graphtag" data-s="3">Person ID + linked identifiers = a graph</div>
+        </div>
+
+        <!-- 2 what partners send -->
+        <div class="scene s2" data-scene="2">
+          <div class="card box src" data-s="0"><b>Identity partner</b><span>TransUnion, Experian, Acxiom</span></div>
+          <div class="card box dst" data-s="0"><b>OpenAP identity solution</b><span>Receives and lands each delivery</span></div>
+          <div class="lane" id="lane1" data-s="1" style="top:80px"><div class="lt">Graph data</div><div class="ls">Ongoing, on a regular refresh cadence</div><div class="track"><i class="pk"></i><i class="pk"></i><i class="pk"></i></div></div>
+          <div class="lane optional" id="lane2" data-s="2" style="top:210px"><div class="lt">Opt-outs</div><div class="ls">Ongoing, where the partner provides them</div><div class="track"><i class="pk"></i><i class="pk"></i><i class="pk"></i></div></div>
+          <div class="lane request" id="lane3" data-s="3" style="top:340px"><div class="lt">Audience segments</div><div class="ls">When requested, e.g. car fans in the U.S.</div><div class="track"><i class="pk"></i><i class="pk"></i><i class="pk"></i></div></div>
+        </div>
+
+        <!-- 3 ingestion -->
+        <div class="scene s3" data-scene="3">
+          <div class="card mini" data-s="0"><b>One partner record</b><span class="mono">TU-0048213</span><p>Name, address, email, phone, household ID, IP, device</p></div>
+          <div class="arrow" data-s="1"></div>
+          <table class="rows" data-s="1">
+            <thead><tr><th>Partner person ID</th><th>Signal</th><th>Raw value</th></tr></thead>
+            <tbody>
+              <tr data-s="1"><td class="pid">TU-0048213</td><td>Name</td><td>Jordan Rivera</td></tr>
+              <tr data-s="1"><td class="pid">TU-0048213</td><td>Postal address</td><td>48 Maple Ave, Columbus OH</td></tr>
+              <tr data-s="1"><td class="pid">TU-0048213</td><td>Email</td><td>jrivera@example.com</td></tr>
+              <tr data-s="1"><td class="pid">TU-0048213</td><td>Phone</td><td>(614) 555-0147</td></tr>
+              <tr data-s="1"><td class="pid">TU-0048213</td><td>Household ID</td><td>TU-HH-551902</td></tr>
+              <tr data-s="1"><td class="pid">TU-0048213</td><td>IP address</td><td>203.0.113.24</td></tr>
+              <tr data-s="1"><td class="pid">TU-0048213</td><td>Device ID</td><td>a3f1…9c2e</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 4 OID creation -->
+        <div class="scene s4" data-scene="4">
+          <div class="steps4" data-s="1"><span class="pill">Normalize</span><span class="sep">›</span><span class="pill">Hash</span><span class="sep">›</span><span class="pill">Encrypt</span><span class="sep">›</span><span class="pill">Assemble</span><span class="sep" style="margin-left:8px">= OID (Open Identifier)</span></div>
+          <table class="rows" data-s="0">
+            <thead><tr><th>Raw value</th><th>Becomes</th><th>Encoded value</th></tr></thead>
+            <tbody>
+              <tr data-s="2"><td>Partner person ID</td><td><span class="type">EPOID</span></td><td class="oid">7b1e04c9…a2f1</td></tr>
+              <tr data-s="3"><td>Household ID (if sent)</td><td><span class="type">EHOID</span></td><td class="oid">c04d9e12…77b0</td></tr>
+              <tr data-s="4"><td>Name</td><td><span class="type">SOID</span></td><td class="oid">5e88a031…0c4d</td></tr>
+              <tr data-s="4"><td>Phone</td><td><span class="type">SOID</span></td><td class="oid">91fa6b27…e3a8</td></tr>
+              <tr data-s="4"><td>Email</td><td><span class="type">SOID</span></td><td class="oid">2d7c40e8…b915</td></tr>
+              <tr data-s="4"><td>IP address</td><td><span class="type">SOID</span></td><td class="oid">e6013fb2…4a7c</td></tr>
+              <tr data-s="4"><td>Device ID</td><td><span class="type">SOID</span></td><td class="oid">8ab2d51f…19e0</td></tr>
+              <tr data-s="5" class="hoid"><td>Postal address, normalized to ZIP11</td><td><span class="type h">HOID</span></td><td class="oid">f3c871a0…5d26</td></tr>
+            </tbody>
+          </table>
+          <div class="note" data-s="2">Encoded values shown are illustrative.</div>
+        </div>
+
+        <!-- 5 comparable -->
+        <div class="scene s5" data-scene="5">
+          <div class="h2" data-s="0">Matching across partners</div>
+          <div class="grid">
+            <div class="colh" data-s="1">TransUnion</div><div></div><div class="colh" data-s="1">Experian</div>
+            <div class="card cell" data-s="1"><small>Raw email</small><span class="mono">jrivera@example.com</span></div><div class="sym eq" data-s="1">=</div><div class="card cell" data-s="1"><small>Raw email</small><span class="mono">jrivera@example.com</span></div>
+            <div class="card cell" data-s="1"><small>Partner-encrypted SOID</small><span class="mono">2d7c40e8…b915</span></div><div class="sym neq" data-s="1">≠</div><div class="card cell" data-s="1"><small>Partner-encrypted SOID</small><span class="mono">a90e13c6…42df</span></div>
+            <div class="card cell cmp" data-s="2"><small>Comparable form</small><span class="mono">6f51b0d2…c8e3</span></div><div class="sym eq" data-s="2">=</div><div class="card cell cmp" data-s="2"><small>Comparable form</small><span class="mono">6f51b0d2…c8e3</span></div>
+          </div>
+          <div class="takeaway" data-s="3">The shared signal layer is what lets graphs be compared and combined.</div>
+        </div>
+
+        <!-- 6 audience record -->
+        <div class="scene s6" data-scene="6">
+          <div class="formula">
+            <div class="fx" data-s="0">Open Identity Audience</div><div class="fop" data-s="0">+</div>
+            <div class="fx" data-s="0">Identity Protocol (IDP)</div><div class="fop" data-s="4">=</div>
+            <div class="fx ar" data-s="4">Audience Record</div>
+          </div>
+          <div class="field" id="field">
+            <div class="aud" data-s="0"><b>Audience members</b></div>
+            <div class="legend" data-s="2">
+              <div><i style="background:var(--c2)"></i>Deterministic: ISP data, publisher first-party data</div>
+              <div data-s="3"><i style="background:#8A94A6"></i>Probabilistic: identity graphs</div>
+            </div>
+            <div class="houses" id="houses" data-s="1"></div>
+            <div class="arframe" data-s="4"><span>Household-level source of truth</span></div>
+          </div>
+        </div>
+
+        <!-- 7 recap -->
+        <div class="scene s7" data-scene="7">
+          <div class="h2" data-s="0">Recap</div>
+          <div class="recap">
+            <div class="card rc" data-k="1" data-s="0"><span class="n">1</span><b>Identity partners</b><p>Send graphs on a regular cadence, plus opt-outs and segments.</p></div>
+            <div class="card rc" data-k="2" data-s="0"><span class="n">2</span><b>Identity solution</b><p>Lands each delivery as one row per person per signal.</p></div>
+            <div class="card rc" data-k="3" data-s="1"><span class="n">3</span><b>OID creation</b><p>Every value becomes a privacy-safe OID; addresses become HOIDs.</p></div>
+            <div class="card rc" data-k="4" data-s="2"><span class="n">4</span><b>Audience Record</b><p>The IDP resolves the audience to households.</p></div>
+          </div>
+          <div class="closing" data-s="3">One identity anchor, held constant from audience definition through distribution to measurement.</div>
+        </div>
+      </div>
+
+      <div class="poster" id="poster">
+        <button id="start" type="button">Play the explainer</button>
+        <small id="posterNote">About 3 minutes, with voiceover and captions.</small>
+      </div>
+    </div>
+
+    <div class="caption" id="caption" aria-live="polite"></div>
+    <div class="controls">
+      <button id="prev" type="button" aria-label="Previous step">Back</button>
+      <button id="play" class="primary" type="button">Play</button>
+      <button id="next" type="button" aria-label="Next step">Next</button>
+      <span class="spacer"></span>
+      <span class="time" id="time"></span>
+      <button id="voice" type="button" aria-pressed="true">Voice on</button>
+      <button id="speed" type="button">Speed 1×</button>
+      <button id="cc" type="button" aria-pressed="true">Captions on</button>
+    </div>
+    <nav class="chapters" id="chapters" aria-label="Chapters"></nav>
+  </section>
+</main>
+
+<script>
+(function(){
+  const scenes = [
+    {name:"Overview", stage:[], cues:[
+      {t:"This short explainer walks through how OpenAP turns identity partner data into an Audience Record."},
+      {t:"There are four stages: identity partners, OpenAP's identity solution, OID creation, and the Audience Record.", stage:[1,2,3,4]}
+    ]},
+    {name:"Identity partners", stage:[1], cues:[
+      {t:"It starts with identity partners: graph providers such as TransUnion, Experian, and Acxiom."},
+      {t:"Each partner keeps a persistent partner person ID for every person in its database, and issues new IDs as its data grows."},
+      {t:"That ID is linked to the person's underlying identifiers: name, postal address, email, phone, household ID, IP addresses, and device IDs."},
+      {t:"A person ID plus its linked identifiers is what we call a graph."}
+    ]},
+    {name:"What partners send", stage:[1,2], cues:[
+      {t:"Partners send OpenAP three kinds of data."},
+      {t:"Graph data arrives on an ongoing, regular refresh cadence."},
+      {t:"Opt-outs arrive on an ongoing basis, where a partner provides them."},
+      {t:"And audience segments, such as a list of car fans in the U.S., are sent when requested.", say:"And audience segments, such as a list of car fans in the U.S., are sent when requested."}
+    ]},
+    {name:"Identity solution", stage:[2], cues:[
+      {t:"OpenAP's identity solution receives each delivery and lands it as raw data."},
+      {t:"Then it breaks each record down to one row per person per signal."},
+      {t:"One partner record becomes many rows, one for each name, address, email, phone, IP, and device, all still tied to the partner's person ID."}
+    ]},
+    {name:"OID creation", stage:[3], cues:[
+      {t:"Next, every value is encoded into an OID, short for Open Identifier.", say:"Next, every value is encoded into an O-I-D, short for Open Identifier."},
+      {t:"Each raw value is normalized, hashed, encrypted, and assembled into a typed, privacy-safe identifier."},
+      {t:"The partner's person ID becomes a partner-specific person OID, called an EPOID.", say:"The partner's person ID becomes a partner-specific person O-I-D, called an E-P-O-I-D."},
+      {t:"Its household ID, where the partner sends one, becomes a household OID, called an EHOID.", say:"Its household ID, where the partner sends one, becomes a household O-I-D, called an E-H-O-I-D."},
+      {t:"Names, phones, emails, IPs, and device IDs become signal OIDs, or SOIDs.", say:"Names, phones, emails, I-Ps, and device IDs become signal O-I-Ds, or S-O-I-Ds."},
+      {t:"And postal addresses are normalized to ZIP11 and encoded as HOIDs: the universal household key that everything else resolves to.", say:"And postal addresses are normalized to zip eleven, and encoded as H-O-I-Ds: the universal household key that everything else resolves to."}
+    ]},
+    {name:"Matching across partners", stage:[3], cues:[
+      {t:"One detail matters for matching across partners."},
+      {t:"Encryption is partner-specific, so the same email from two partners produces two different OIDs.", say:"Encryption is partner-specific, so the same email from two partners produces two different O-I-Ds."},
+      {t:"To match them, OpenAP converts each one to a comparable form, and the two line up."},
+      {t:"That shared signal layer is what lets OpenAP compare graphs and combine them."}
+    ]},
+    {name:"Audience Record", stage:[4], cues:[
+      {t:"Finally, an audience comes in, and an Identity Protocol, or IDP, is applied to it.", say:"Finally, an audience comes in, and an Identity Protocol, or I-D-P, is applied to it."},
+      {t:"The IDP resolves each member of the audience to a household.", say:"The I-D-P resolves each member of the audience to a household."},
+      {t:"It applies the strongest signals first: deterministic sources such as ISP data and publisher first-party data.", say:"It applies the strongest signals first: deterministic sources, such as I-S-P data and publisher first-party data."},
+      {t:"Then probabilistic identity graphs fill in the rest."},
+      {t:"The result is the Audience Record: the household-level source of truth for who is in target on a campaign."}
+    ]},
+    {name:"Recap", stage:[1,2,3,4], cues:[
+      {t:"To recap: partner graphs come in on a regular cadence, and each delivery is landed one row per signal."},
+      {t:"Every value becomes an OID, and addresses become the household key.", say:"Every value becomes an O-I-D, and addresses become the household key."},
+      {t:"An Identity Protocol resolves the audience to households."},
+      {t:"And the Audience Record keeps one identity anchor, held constant from audience definition through distribution to measurement."}
+    ]}
+  ];
+
+  // ---------- build houses + dots (scene 6) ----------
+  const housesEl = document.getElementById('houses');
+  const field = document.getElementById('field');
+  const housePos = [[0,0],[240,0],[480,0],[0,230],[240,230],[480,230]];
+  const houseSvg = '<svg viewBox="0 0 150 150"><path class="roof" d="M10 70 L75 14 L140 70 Z"/><rect class="body" x="26" y="70" width="98" height="70" rx="4"/></svg>';
+  housePos.forEach((p,i)=>{ const h=document.createElement('div'); h.className='house'; h.style.left=p[0]+'px'; h.style.top=p[1]+'px'; h.dataset.i=i; h.innerHTML=houseSvg; housesEl.appendChild(h); });
+  // dots: 10 members; first 7 deterministic -> houses 0-3, last 3 probabilistic -> houses 4-5
+  const assign=[0,0,1,2,2,3,3,4,5,5];
+  const dots=[];
+  assign.forEach((hi,i)=>{
+    const d=document.createElement('div'); d.className='dot'+(i>=7?' prob':'');
+    const col=i%2, row=Math.floor(i/2);
+    const sx=40+50+col*70, sy=20+40+row*72;
+    d.style.left=sx+'px'; d.style.top=sy+'px';
+    const hp=housePos[hi]; const hx=520+hp[0]+48+((i%3)*22), hy=hp[1]+92+(i%2)*14;
+    d.style.setProperty('--tx',(hx-sx)+'px'); d.style.setProperty('--ty',(hy-sy)+'px');
+    d.style.opacity='0'; d.style.transitionProperty='transform,opacity,background';
+    field.appendChild(d); dots.push({el:d,hi,prob:i>=7});
+  });
+  function updateHouses(si,ci){
+    const inScene = si===6;
+    dots.forEach(d=>{
+      d.el.style.opacity = inScene && ci>=0 ? '1':'0';
+      const go = inScene && ((!d.prob && ci>=2) || (d.prob && ci>=3));
+      d.el.classList.toggle('go', go);
+    });
+    housesEl.querySelectorAll('.house').forEach(h=>{
+      const i=+h.dataset.i;
+      h.classList.toggle('det', inScene && i<=3 && ci>=2);
+      h.classList.toggle('prb', inScene && i>=4 && ci>=3);
+    });
+  }
+
+  // ---------- scaling ----------
+  const screen=document.getElementById('screen'), stage=document.getElementById('stage');
+  function fit(){ stage.style.transform='scale('+(screen.clientWidth/1280)+')'; }
+  window.addEventListener('resize',fit); fit();
+
+  // ---------- render ----------
+  const sceneEls=[...stage.querySelectorAll('.scene')];
+  const chips=[...stage.querySelectorAll('.chip')];
+  const cap=document.getElementById('caption');
+  let si=0, ci=0, playing=false, token=0, timer=null, safety=null;
+  let voiceOn=('speechSynthesis' in window), rate=1, voice=null;
+
+  function render(){
+    const sc=scenes[si], cue=sc.cues[ci];
+    sceneEls.forEach((el,i)=>{
+      el.classList.toggle('active', i===si);
+      el.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('on', i===si && +x.dataset.s<=ci));
+    });
+    // lanes animate only when on
+    sceneEls[3].classList.toggle('hl', si===3 && ci>=2);
+    const st = cue.stage || sc.stage;
+    chips.forEach(c=>c.classList.toggle('on', st.includes(+c.dataset.k)));
+    updateHouses(si,ci);
+    cap.textContent=cue.t;
+    updateChapters();
+  }
+
+  // ---------- chapters / time ----------
+  const chaptersEl=document.getElementById('chapters');
+  const wordsOf=s=>s.split(/\s+/).length;
+  const cueDur=c=>Math.max(2.2, wordsOf(c.say||c.t)/2.55)+0.5; // seconds at 1x
+  const total=scenes.reduce((a,s)=>a+s.cues.reduce((b,c)=>b+cueDur(c),0),0);
+  document.getElementById('posterNote').textContent='About '+Math.round(total/60)+' minutes, with voiceover and captions.';
+  scenes.forEach((s,i)=>{
+    const b=document.createElement('button'); b.type='button';
+    b.innerHTML='<span class="bar"><span class="fill"></span></span><span class="lbl">'+(i+1)+'. '+s.name+'</span>';
+    b.setAttribute('aria-label','Chapter '+(i+1)+': '+s.name);
+    b.addEventListener('click',()=>jump(i,0));
+    chaptersEl.appendChild(b);
+  });
+  const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+  function updateChapters(){
+    [...chaptersEl.children].forEach((b,i)=>{
+      const f=b.querySelector('.fill');
+      f.style.width = i<si ? '100%' : i>si ? '0%' : ((ci+1)/scenes[i].cues.length*100)+'%';
+      b.classList.toggle('cur',i===si);
+    });
+    let el=0; for(let i=0;i<si;i++) scenes[i].cues.forEach(c=>el+=cueDur(c)); for(let j=0;j<ci;j++) el+=cueDur(scenes[si].cues[j]);
+    document.getElementById('time').textContent=fmt(el/rate)+' / '+fmt(total/rate);
+  }
+
+  // ---------- voice ----------
+  function pickVoice(){
+    if(!('speechSynthesis' in window)) return;
+    const vs=speechSynthesis.getVoices().filter(v=>/^en(-|_|$)/i.test(v.lang));
+    const prefs=[/Natural/i,/Google US English/i,/Samantha/i,/Aria/i,/Jenny/i,/Ava/i,/Allison/i,/en-US/i];
+    for(const p of prefs){ const v=vs.find(v=>p.test(v.name)||p.test(v.lang)); if(v){voice=v;return;} }
+    voice=vs[0]||null;
+  }
+  if('speechSynthesis' in window){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
+  else { document.getElementById('voice').textContent='Voice unavailable'; document.getElementById('voice').disabled=true; }
+
+  function stopAudio(){ token++; clearTimeout(timer); clearTimeout(safety); if('speechSynthesis' in window) speechSynthesis.cancel(); }
+
+  function playCue(){
+    stopAudio(); render();
+    const my=token, cue=scenes[si].cues[ci], dur=cueDur(cue)/rate*1000;
+    const done=()=>{ if(my!==token) return; clearTimeout(safety); const lastInScene = ci===scenes[si].cues.length-1; timer=setTimeout(()=>{ if(my===token) advance(); }, lastInScene?900:350); };
+    if(voiceOn && 'speechSynthesis' in window){
+      const u=new SpeechSynthesisUtterance(cue.say||cue.t);
+      if(voice) u.voice=voice; u.lang=voice?voice.lang:'en-US'; u.rate=0.98*rate; u.pitch=1;
+      u.onend=done; u.onerror=done;
+      speechSynthesis.speak(u);
+      safety=setTimeout(done, dur*2.2+4000);
+    } else {
+      timer=setTimeout(done, dur);
+    }
+  }
+  function advance(){
+    if(ci<scenes[si].cues.length-1){ ci++; }
+    else if(si<scenes.length-1){ si++; ci=0; }
+    else { setPlaying(false); render(); playBtn.textContent='Replay'; ended=true; return; }
+    playCue();
+  }
+  let ended=false;
+  const playBtn=document.getElementById('play');
+  function setPlaying(p){ playing=p; playBtn.textContent=p?'Pause':'Play'; if(!p) stopAudio(); }
+  function play(){ document.getElementById('poster').classList.add('gone'); if(ended){ si=0; ci=0; ended=false; } setPlaying(true); playCue(); }
+  function pause(){ setPlaying(false); render(); }
+  function jump(s,c){ ended=false; si=s; ci=c; document.getElementById('poster').classList.add('gone'); if(playing) playCue(); else { stopAudio(); render(); } }
+  function step(dir){
+    let s=si,c=ci+dir;
+    if(c<0){ if(s>0){ s--; c=scenes[s].cues.length-1; } else c=0; }
+    else if(c>=scenes[s].cues.length){ if(s<scenes.length-1){ s++; c=0; } else c=scenes[s].cues.length-1; }
+    jump(s,c);
+  }
+
+  document.getElementById('start').addEventListener('click',play);
+  playBtn.addEventListener('click',()=>playing?pause():play());
+  document.getElementById('prev').addEventListener('click',()=>step(-1));
+  document.getElementById('next').addEventListener('click',()=>step(1));
+  document.getElementById('voice').addEventListener('click',e=>{
+    voiceOn=!voiceOn; e.currentTarget.textContent=voiceOn?'Voice on':'Voice off'; e.currentTarget.setAttribute('aria-pressed',voiceOn);
+    if(playing) playCue();
+  });
+  const speeds=[1,1.25,0.85]; let sp=0;
+  document.getElementById('speed').addEventListener('click',e=>{
+    sp=(sp+1)%speeds.length; rate=speeds[sp]; e.currentTarget.textContent='Speed '+rate+'×';
+    if(playing) playCue(); else updateChapters();
+  });
+  document.getElementById('cc').addEventListener('click',e=>{
+    const on=cap.classList.toggle('hidden'); e.currentTarget.textContent=on?'Captions off':'Captions on'; e.currentTarget.setAttribute('aria-pressed',!on);
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.target.closest('button')&&(e.key===' '||e.key==='Enter')) return;
+    if(e.key===' '){ e.preventDefault(); playing?pause():play(); }
+    else if(e.key==='ArrowRight') step(1);
+    else if(e.key==='ArrowLeft') step(-1);
+  });
+  // Chrome stops long speech queues when the tab is hidden; pause cleanly instead
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden && playing) pause(); });
+
+  render();
+})();
+</script>
+</body>
+</html>
